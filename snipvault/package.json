@@ -1,0 +1,22 @@
+{
+  "name": "snipvault",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.10.0",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "highlight.js": "^11.11.1",
+    "marked": "^18.0.4",
+    "uuid": "^14.0.0"
+  }
+}
