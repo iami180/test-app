@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ML / data artifacts
+*.pt
+*.pth
+*.ckpt
+data/raw/
+data/processed/
+*.npy
+*.npz
+wandb/
+runs/
+checkpoints/
+outputs/
+
+# Sensor logs
+*.csv
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
