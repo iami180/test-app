@@ -56,8 +56,9 @@ L2. Code and experiments are released.
 
 - **F1** calibration error vs measurement noise: FD LS vs two-phase PINN,
   mean +/- std over seeds. `docs/f1_calibration_noise.png` (the key result).
-- **F2** twin tracking relL2 vs sensor resolution (4/8/16) and noise, with a
-  bilinear-interpolation baseline. *(to build)*
+- **F2** twin tracking relL2 vs sensor resolution (4/8/16/32) with a
+  bilinear-interpolation baseline. `docs/f2_sensor_resolution.png` (done) — the
+  twin stays ~3-8% while naive interpolation reaches ~84% at 4x4.
 - **F3** runtime + speed-up vs grid resolution. `docs/benchmark_speedup.png` (done).
 - (qualitative) twin tracking panels `docs/digital_twin.png`; FNO vs solver
   fields `docs/predictions.png`.
@@ -73,6 +74,7 @@ L2. Code and experiments are released.
 ## Reproducibility checklist
 
 - [x] Open code, deterministic seeds, CPU-only runnable.
-- [ ] F1 multi-seed figure + table (running).
-- [ ] F2 sensor-resolution/noise sweep.
+- [x] F1 multi-seed figure + table.
+- [x] F2 sensor-resolution sweep with baseline.
 - [ ] Pinned dependency versions + one-command repro script.
+- [ ] Prose draft of the preprint.
