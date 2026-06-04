@@ -37,6 +37,30 @@ Az FNO jóslata szabad szemmel megkülönböztethetetlen a solvertől:
 
 ![FNO jóslat vs igazi megoldás](docs/predictions.png)
 
+## Digital twin: olcsó szenzorból teljes mező
+
+A `digital_twin.py` egy **működő digital twin prototípus**: egy valós hődiffundáló
+objektum élő virtuális mása, ami három dolgot tud:
+
+1. **Kalibráció** — visszafejti a fizikát (α diffúziós állandó) megfigyelésekből.
+   Két út: (a) gyors zárt-alakú FD legkisebb-négyzetes becslés (**4.8% hiba**,
+   tiszta adatra); (b) `pinn.py` egy **zaj-robusztus** kétfázisú módszer — előbb
+   sima felületet illeszt az adatra, majd az α-t a háló deriváltjaiból olvassa ki
+   a PDE-vel (**~1–2% hiba**, és kezeli a naiv inverz-PINN identifiability-driftjét).
+2. **Assimiláció** — egy **8×8-as, zajos** szenzor-leolvasást (a jövőbeli AMG8833
+   hardver szimulációja) beolvaszt a teljes mezőbe, megőrizve a fizikából jövő
+   finomszerkezetet.
+3. **Előrejelzés** — időben előre gördíti az állapotot (a gyors FNO vagy a solver).
+
+Az élő hurokban a twin a **rejtett, teljes felbontású valóságot** követi, miközben
+csak az olcsó 8×8 szenzort látja — **3–9% relatív L2 hibával**:
+
+![Digital twin követés](docs/digital_twin.png)
+
+> Ez köti össze a szoftvert a tervezett **hardveres** fázissal: a szimulált 8×8
+> szenzor helyére egy valódi AMG8833 kerül, és ugyanez a twin követi a valós
+> fémlapot. (Roadmap 2–4. hét.)
+
 ## Felépítés
 
 ```
@@ -48,7 +72,9 @@ Az FNO jóslata szabad szemmel megkülönböztethetetlen a solvertől:
 │   ├── model.py        # Fourier Neural Operator (2D FNO)
 │   ├── train.py        # tréning loop + relatív L2 kiértékelés
 │   ├── predict.py      # vizualizáció: u0 | igazi uT | FNO jóslat | hibatérkép
-│   └── compare_speed.py # benchmark: FNO vs klasszikus solver (idő + pontosság)
+│   ├── compare_speed.py # benchmark: FNO vs klasszikus solver (idő + pontosság)
+│   ├── pinn.py         # Physics-Informed NN: inverz kalibráció (α visszanyerése)
+│   └── digital_twin.py # digital twin: kalibráció + assimiláció + előrejelzés
 └── sensor/
     └── read_amg8833.py # 8x8 hőszenzor kiolvasó (MicroPython / ESP32)
 ```
@@ -75,6 +101,12 @@ python src/predict.py --n-samples 4 --out outputs/predictions.png
 python src/train.py --samples 600 --epochs 25 --t-final 0.5 \
     --out checkpoints/fno_heat_long.pt
 python src/compare_speed.py --ckpt checkpoints/fno_heat_long.pt
+
+# PINN inverz kalibráció: rejtett alpha visszanyerése megfigyelésekből
+python src/pinn.py --true-alpha 0.01
+
+# Digital twin: 8x8 zajos szenzorból teljes mező követése (+ ábra)
+python src/digital_twin.py --plot outputs/digital_twin.png
 ```
 
 **1. heti cél:** a validációs relatív L2 hiba < ~2% (a kanonikus FNO benchmark).
@@ -82,10 +114,18 @@ python src/compare_speed.py --ckpt checkpoints/fno_heat_long.pt
 
 ## Roadmap
 
-- [x] **1. hét** — szimulátor + adatgenerálás + FNO tréning + vizualizáció (szimon, val relL2 ≈ 0.016)
-- [ ] **2. hét** — garázs kísérlet (AMG8833 + fémlap), α kalibráció
-- [ ] **3. hét** — sim-to-real teszt: szimon tanult modell valós adaton (failure analysis)
-- [ ] **4. hét** — fine-tune / fizikai loss → a valós hiba csökkentése + demó
+**Szoftver (startup-versenyképes mag):**
+- [x] FNO szimulátor + adatgenerálás + tréning + vizualizáció (val relL2 ≈ 0.016)
+- [x] Benchmark: FNO vs klasszikus solver (akár **9× gyorsulás**, CPU-n)
+- [x] PINN inverz kalibráció (α visszanyerése megfigyelésekből)
+- [x] Digital twin: olcsó 8×8 szenzorból teljes mező követése (**3–9% hiba**)
+- [ ] Nehezebb PDE (Navier–Stokes) — itt 100–1000× a gyorsulás
+- [ ] Web API / SaaS demó + bizonytalanság-becslés
+
+**Hardver (a megkülönböztető réteg):**
+- [ ] **2. hét** — garázs kísérlet (AMG8833 + fémlap), valós α kalibráció
+- [ ] **3. hét** — sim-to-real teszt: szimon tanult modell valós adaton
+- [ ] **4. hét** — fine-tune / fizikai loss → valós hiba csökkentése + demó
 
 ## A fizika
 
