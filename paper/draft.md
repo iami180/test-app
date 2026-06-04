@@ -10,14 +10,15 @@ clean simulation. We present a small, fully reproducible testbed for a *digital
 twin* of a heat-diffusing object that must (i) calibrate the unknown diffusivity
 from observations, (ii) reconstruct and track the full temperature field from a
 low-resolution, noisy sensor, and (iii) forecast forward with a learned
-operator. We report two findings. First, the naive inverse physics-informed
+operator. We report two observations. First, the naive inverse physics-informed
 neural network (PINN) — a flexible network with a jointly-trained diffusivity —
-is ill-conditioned: as the network fits the data it explains the dynamics with
-its own flexibility and the diffusivity drifts toward zero. A simple two-phase
-estimator (fit a smooth surrogate, then read the parameter off its
-automatic-differentiation derivatives via the PDE) removes the drift and, in a
-multi-seed study, is markedly more robust to measurement noise than a
-finite-difference baseline (≈10% error vs ≈37% at noise σ=0.05). Second, a
+is poorly conditioned in our settings: because weights and the diffusivity are
+optimised jointly, the network can explain the data with its own flexibility and
+the diffusivity drifts toward zero. A decoupled two-phase estimator (fit a
+smooth neural field, then read the parameter off its automatic-differentiation
+derivatives via the PDE) avoids the drift and, in a multi-seed study, is
+markedly more robust to measurement noise than a finite-difference baseline
+(≈10% error vs ≈37% at noise σ=0.05). Second, a
 Fourier Neural Operator (FNO) forecaster reaches up to ≈9× speed-up over the
 classical solver at matched accuracy, the speed-up growing with resolution as
 predicted by the O(N⁴) vs O(N² log N) cost scaling. The assembled twin tracks a
@@ -72,30 +73,47 @@ problem is expensive (high resolution, long horizons, many queries, or GPU).
 
 ![Figure 3](../docs/benchmark_speedup.png)
 
-## 4. Inverse calibration and an identifiability finding
+## 4. Inverse calibration: an observed identifiability issue and a decoupled estimator
 
 A digital twin must infer the physics of the real object. We first try the
 standard inverse PINN: a coordinate network u_θ(x,y,t) with a trainable α,
-optimised on a data term (snapshots) plus a PDE-residual term. On this problem
-it is ill-conditioned. Across configurations (network size, physics weight,
-early stopping) α reproducibly **drifts toward zero**: as the data term falls,
-the network represents the snapshots with its own flexibility, so the residual
-can be satisfied with too little diffusion. The true α is only crossed
-transiently. We found held-out-time validation does not catch the drift,
-because the network fits the held-out snapshot for any α.
+optimised on a data term (snapshots) plus a PDE-residual term. In the settings
+we study it is poorly conditioned. Across configurations (network size, physics
+weight, early stopping) α reproducibly **drifts toward zero**: because the
+network weights and α are optimised jointly, many (weights, α) pairs reach a
+similar loss, and as the data term falls the network represents the snapshots
+with its own flexibility, so the residual can be satisfied with too little
+diffusion. The true α is only crossed transiently, and held-out-time validation
+does not catch the drift because the network fits the held-out snapshot for any
+α. We do not claim this as a new phenomenon — the conditioning and stability of
+PINN-based parameter estimation is a known topic `[CITE: Wang 2021;
+Krishnapriyan 2021]`; we document it systematically on this problem.
 
-**Two-phase remedy.** We decouple fitting from parameter estimation. Phase 1
-fits a smooth surrogate u_θ to the data by regression alone (well-posed, no α to
-drift). Phase 2 reads α off the trained surrogate as the closed-form
-least-squares solution of u_t = α ∇²u, evaluated with automatic-differentiation
-derivatives. This converges monotonically to the true α (≈1–2% error).
+**Decoupled two-phase estimator.** We separate fitting from parameter
+estimation. Phase 1 fits a smooth **neural field** u_θ to the data by regression
+alone — with no physics loss it is a coordinate network, not a PINN, and the fit
+is well-posed with no α to drift. Phase 2 reads α off the trained field as the
+closed-form least-squares solution of u_t = α ∇²u,
 
-Because the derivatives come from a smooth network rather than raw finite
-differences, the estimate is noise-robust. Figure 1 sweeps measurement noise
-(4 seeds): the finite-difference least-squares estimator is best on clean data
-(≈2%) but degrades sharply (≈14% at σ=0.01, ≈37% at σ=0.05), while the two-phase
-PINN stays flat (≈10%) until extreme noise. The crossover near σ≈0.01 motivates
-the PINN whenever measurements are noisy.
+  α̂ = Σ_i (∇²u_i)(∂_t u_i) / Σ_i (∇²u_i)² ,
+
+with the derivatives obtained by automatic differentiation. Two-stage schemes
+that first estimate a smooth state/derivatives and then identify a parameter are
+not new `[CITE: ...]`; our point is that this decoupling removes the joint-PINN
+drift here. In our experiments α̂ converges stably to within ≈1–2% of the true
+value (a single overshoot of ~0.3%→~1.9% late in training shows it is not
+strictly monotone).
+
+Because the derivatives come from a smooth neural field rather than raw finite
+differences (which subtract nearby noisy samples and divide by a small spacing,
+amplifying noise), the estimate is noise-robust. Figure 1 sweeps measurement
+noise (4 seeds): the finite-difference least-squares estimator is best on clean
+data (≈2%) but degrades sharply (≈14% at σ=0.01, ≈37% at σ=0.05), while the
+neural-field estimator stays flat (≈10%) until extreme noise. (Its clean-data
+floor of ≈10% is set by the fitting budget, not by noise, and tightens with more
+iterations.) The crossover near σ≈0.01 motivates the neural-field route whenever
+measurements are noisy. The figure legend labels this "two-phase PINN" for
+brevity; as noted, phase 1 carries no physics loss.
 
 ![Figure 1](../docs/f1_calibration_noise.png)
 
@@ -108,12 +126,21 @@ residual, and add it back — which preserves the physics-driven fine structure
 instead of overwriting it with a blocky upsample.
 
 Figure 2 reports tracking error vs sensor resolution at noise σ=0.02 (5 seeds),
-against a naive bilinear-interpolation baseline that uses the sensor alone. The
-twin stays at ≈3–8% across resolutions, while naive interpolation degrades from
-≈10% at 32×32 to ≈84% at 4×4. With only 16 sensor pixels the twin still tracks
-the hidden full-resolution field at ≈8%, because the physics model fills in what
-the sensor cannot resolve. The qualitative tracking is shown in
-`docs/digital_twin.png`.
+against a naive bilinear-interpolation baseline. The twin stays at ≈3–8% across
+resolutions, while naive interpolation degrades from ≈10% at 32×32 to ≈84% at
+4×4. With only 16 sensor pixels the twin still tracks the hidden full-resolution
+field at ≈8%, because the physics model fills in what the sensor cannot resolve.
+The qualitative tracking is shown in `docs/digital_twin.png`.
+
+We stress the information asymmetry, by design: the twin is initialised from a
+dense calibration snapshot, knows the calibrated α, and forecasts in time,
+whereas the baseline only spatially interpolates the current sensor frame. The
+comparison therefore measures the value added by a calibrated physics model over
+sensor-only interpolation; it is not a like-for-like estimator comparison. A
+stronger baseline (e.g. interpolation with temporal persistence, or a linear
+state estimator) is left as an extension. Both methods use the same relative-L2
+metric against the same hidden field, and results are averaged over 5 random
+initial conditions.
 
 ![Figure 2](../docs/f2_sensor_resolution.png)
 

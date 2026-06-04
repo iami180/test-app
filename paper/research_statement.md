@@ -39,15 +39,18 @@ plate), and the classical solver is a canonical FNO benchmark. Simulation
 provides the teacher and the ground truth; the 8×8 sensor is currently
 **simulated** (real hardware is the next, hardware phase).
 
-## Two main results (the novelty)
+## Two main results
 
-1. **Identifiability finding + remedy.** The naive inverse PINN (a flexible
-   network with a jointly-trained α) is ill-conditioned: as the network fits
-   the data it explains the dynamics with its own flexibility instead of
-   diffusion, and α drifts toward zero. We use a **two-phase** estimator — fit a
-   smooth surrogate, then read α off its autodiff derivatives via the PDE —
-   which removes the drift and is **noise-robust**, unlike the finite-difference
-   baseline that amplifies noise.
+1. **Observed identifiability issue + a decoupled estimator.** The naive inverse
+   PINN (a flexible network with a jointly-trained α) is poorly conditioned here:
+   because weights and α are optimised together, the network explains the data
+   with its own flexibility instead of diffusion, and α drifts toward zero. We
+   document this systematically (the conditioning of PINN parameter estimation is
+   a known topic, not claimed as new). We then use a **two-phase** estimator —
+   fit a smooth **neural field** (phase 1 has no physics loss), then read α off
+   its autodiff derivatives via the PDE least squares
+   `α̂ = Σ(∇²u·∂ₜu)/Σ(∇²u)²` — which avoids the drift and is **noise-robust**,
+   unlike the finite-difference baseline that amplifies noise.
 
 2. **Working cheap-sensor digital twin.** The twin tracks the hidden,
    full-resolution truth while seeing only the noisy 8×8 sensor (3–9% relative

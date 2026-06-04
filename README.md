@@ -46,9 +46,11 @@ of a heat-diffusing object that does three things:
 1. **Calibration** — recovers the physics (diffusivity α) from observations.
    Two routes: (a) a fast closed-form finite-difference least-squares estimate
    (**4.8% error** on clean data); (b) `pinn.py`, a **noise-robust** two-phase
-   method that first fits a smooth surrogate to the data, then reads α off the
-   network's autodiff derivatives via the PDE (**~1–2% error**, and it avoids
-   the identifiability drift of the naive joint inverse PINN).
+   estimator that first fits a smooth **neural field** to the data (phase 1 has
+   no physics loss, so it is a coordinate network, not a PINN), then reads α off
+   its autodiff derivatives via the PDE least-squares
+   `α̂ = Σ(∇²u·∂ₜu) / Σ(∇²u)²` (**~1–2% error**, avoiding the α-drift of the
+   naive jointly-optimised inverse PINN).
 2. **Assimilation** — fuses a low-resolution **noisy 8×8** sensor reading into
    the full field with a coarse-scale correction that preserves the
    physics-driven fine structure.
@@ -59,14 +61,17 @@ while seeing only the cheap 8×8 sensor — at **3–9% relative L2**:
 
 ![Digital twin tracking](docs/digital_twin.png)
 
-## Inverse calibration and the identifiability finding
+## Inverse calibration: an observed identifiability issue
 
 The naive inverse PINN — a flexible network and a trainable α optimised jointly
-— is ill-conditioned on this problem: as the network fits the snapshots it
-explains the field with its own flexibility instead of diffusion, so α drifts
-toward 0. The two-phase method in `pinn.py` sidesteps this by decoupling the
-fit (well-posed regression) from the parameter read-out (closed-form least
-squares on autodiff derivatives), which converges monotonically to the true α.
+— is poorly conditioned on this problem: because the weights and α move
+together, the network can fit the snapshots with its own flexibility instead of
+diffusion, so α drifts toward 0. (We document this systematically; the
+conditioning of PINN parameter estimation is a known topic, not claimed as new.)
+The two-phase estimator in `pinn.py` decouples the fit (well-posed regression on
+a neural field) from the parameter read-out (closed-form least squares on
+autodiff derivatives), which in our experiments converges stably to within
+~1–2% of the true α (not strictly monotone — a small late overshoot is visible).
 
 ## Layout
 
