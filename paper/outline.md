@@ -77,4 +77,5 @@ L2. Code and experiments are released.
 - [x] F1 multi-seed figure + table.
 - [x] F2 sensor-resolution sweep with baseline.
 - [ ] Pinned dependency versions + one-command repro script.
-- [ ] Prose draft of the preprint.
+- [x] Prose draft of the preprint (`paper/draft.md`).
+- [ ] Fill citations; optional LaTeX conversion.
