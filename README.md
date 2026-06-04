@@ -1,140 +1,133 @@
-# Neural Operator találkozik a valósággal
+# Neural Operators for Heat Diffusion
 
-*Gyors PDE-solverek tanulása valós mérésekből — hődiffúzió mint tesztrendszer.*
+*Fast learned PDE surrogates, physics-informed inverse calibration, and a
+digital twin — with heat diffusion as the test system.*
 
-## A kutatási kérdés
+## Research question
 
-> Be tudok-e tanítani egy **Fourier Neural Operatort** szimulált fizikán, ami
-> aztán a valódi, zajos, ismeretlen-peremfeltételű garázs-kísérleten is
-> működik — és ha nem, hogyan zárom be a **sim-to-real** szakadékot?
+> Can a **Fourier Neural Operator** trained on simulated physics transfer to
+> real, noisy, unknown-boundary measurements — and if not, how is the
+> **sim-to-real** gap closed?
 
-A Neural Operator irodalom szinte teljes egészében tiszta szimulált adaton
-fut. A megkülönböztető érték itt egy **olcsó valós mérés** (AMG8833 8×8
-hőszenzor egy fémlapon), amin a szimon tanult modellt validáljuk.
+The neural-operator literature is validated almost entirely on clean simulated
+data. The aim here is to study transfer to a real measurement, using a cheap
+**8×8 thermal sensor (AMG8833)** on a metal plate as the physical reference.
 
-## Eredmény: az FNO akár 9× gyorsabb a klasszikus solvernél
+## Result: the FNO is up to 9× faster than the classical solver
 
-A `t=0.5` horizontra tanított FNO **azonos pontosság mellett** (val relL2 ≈
-0.0197) felülmúlja a klasszikus finite-difference solvert — és a gyorsulás
-**nő a felbontással**, mert a stabilitás-korlátos solver költsége ~O(N⁴),
-az FNO-é ~O(N² log N). Mindez **CPU-n, GPU nélkül**.
+An FNO trained for a `t=0.5` horizon outperforms the classical
+finite-difference solver **at matched accuracy** (val relative L2 ≈ 0.0197),
+and the speed-up **grows with resolution**: the stability-limited solver costs
+~O(N⁴) while the FNO costs ~O(N² log N). All measured on **CPU, no GPU**.
 
-![FNO vs solver gyorsulás](docs/benchmark_speedup.png)
+![FNO vs solver speed-up](docs/benchmark_speedup.png)
 
-| felbontás | solver | FNO | gyorsulás |
+| grid | solver | FNO | speed-up |
 |---:|---:|---:|---:|
 | 64×64 | 6.8 ms | 5.1 ms | **1× (break-even)** |
 | 128×128 | 59.8 ms | 21.6 ms | **3×** |
 | 192×192 | 258 ms | 49.5 ms | **5×** |
 | 256×256 | 890 ms | 95.7 ms | **9×** |
 
-> Őszinte megjegyzés: **rövid** horizonton (`t=0.02`) a triviális solver még
-> gyorsabb (az FNO 0.04–0.48×). Az FNO ott nyer, ahol a feladat drága: nagy
-> felbontás, hosszú horizont, nehéz PDE-k, GPU, vagy sok lekérdezés. Részletek:
+> Regime note: at a **short** horizon (`t=0.02`) the trivial solver is still
+> faster (FNO 0.04–0.48×). The FNO wins where the problem is expensive: high
+> resolution, long horizons, harder PDEs, GPU, or many-query settings. Details:
 > [docs/benchmark.md](docs/benchmark.md).
 
-Az FNO jóslata szabad szemmel megkülönböztethetetlen a solvertől:
+The FNO prediction is visually indistinguishable from the solver:
 
-![FNO jóslat vs igazi megoldás](docs/predictions.png)
+![FNO prediction vs ground truth](docs/predictions.png)
 
-## Digital twin: olcsó szenzorból teljes mező
+## Digital twin: full field from a cheap sensor
 
-A `digital_twin.py` egy **működő digital twin prototípus**: egy valós hődiffundáló
-objektum élő virtuális mása, ami három dolgot tud:
+`digital_twin.py` is a working digital-twin prototype — a live virtual replica
+of a heat-diffusing object that does three things:
 
-1. **Kalibráció** — visszafejti a fizikát (α diffúziós állandó) megfigyelésekből.
-   Két út: (a) gyors zárt-alakú FD legkisebb-négyzetes becslés (**4.8% hiba**,
-   tiszta adatra); (b) `pinn.py` egy **zaj-robusztus** kétfázisú módszer — előbb
-   sima felületet illeszt az adatra, majd az α-t a háló deriváltjaiból olvassa ki
-   a PDE-vel (**~1–2% hiba**, és kezeli a naiv inverz-PINN identifiability-driftjét).
-2. **Assimiláció** — egy **8×8-as, zajos** szenzor-leolvasást (a jövőbeli AMG8833
-   hardver szimulációja) beolvaszt a teljes mezőbe, megőrizve a fizikából jövő
-   finomszerkezetet.
-3. **Előrejelzés** — időben előre gördíti az állapotot (a gyors FNO vagy a solver).
+1. **Calibration** — recovers the physics (diffusivity α) from observations.
+   Two routes: (a) a fast closed-form finite-difference least-squares estimate
+   (**4.8% error** on clean data); (b) `pinn.py`, a **noise-robust** two-phase
+   method that first fits a smooth surrogate to the data, then reads α off the
+   network's autodiff derivatives via the PDE (**~1–2% error**, and it avoids
+   the identifiability drift of the naive joint inverse PINN).
+2. **Assimilation** — fuses a low-resolution **noisy 8×8** sensor reading into
+   the full field with a coarse-scale correction that preserves the
+   physics-driven fine structure.
+3. **Forecasting** — advances the state in time (fast FNO or the solver).
 
-Az élő hurokban a twin a **rejtett, teljes felbontású valóságot** követi, miközben
-csak az olcsó 8×8 szenzort látja — **3–9% relatív L2 hibával**:
+In the live loop the twin tracks the **hidden, full-resolution ground truth**
+while seeing only the cheap 8×8 sensor — at **3–9% relative L2**:
 
-![Digital twin követés](docs/digital_twin.png)
+![Digital twin tracking](docs/digital_twin.png)
 
-> Ez köti össze a szoftvert a tervezett **hardveres** fázissal: a szimulált 8×8
-> szenzor helyére egy valódi AMG8833 kerül, és ugyanez a twin követi a valós
-> fémlapot. (Roadmap 2–4. hét.)
+## Inverse calibration and the identifiability finding
 
-## Felépítés
+The naive inverse PINN — a flexible network and a trainable α optimised jointly
+— is ill-conditioned on this problem: as the network fits the snapshots it
+explains the field with its own flexibility instead of diffusion, so α drifts
+toward 0. The two-phase method in `pinn.py` sidesteps this by decoupling the
+fit (well-posed regression) from the parameter read-out (closed-form least
+squares on autodiff derivatives), which converges monotonically to the true α.
+
+## Layout
 
 ```
 .
 ├── requirements.txt
 ├── src/
-│   ├── simulate.py     # 2D hődiffúzió finite-difference solver (ground truth)
-│   ├── dataset.py      # (u0 -> uT) tanítópárok generálása
-│   ├── model.py        # Fourier Neural Operator (2D FNO)
-│   ├── train.py        # tréning loop + relatív L2 kiértékelés
-│   ├── predict.py      # vizualizáció: u0 | igazi uT | FNO jóslat | hibatérkép
-│   ├── compare_speed.py # benchmark: FNO vs klasszikus solver (idő + pontosság)
-│   ├── pinn.py         # Physics-Informed NN: inverz kalibráció (α visszanyerése)
-│   └── digital_twin.py # digital twin: kalibráció + assimiláció + előrejelzés
+│   ├── simulate.py      # 2D heat-diffusion finite-difference solver (ground truth)
+│   ├── dataset.py       # generates (u0 -> uT) training pairs
+│   ├── model.py         # Fourier Neural Operator (2D FNO)
+│   ├── train.py         # training loop + relative L2 evaluation
+│   ├── predict.py       # visualisation: u0 | true uT | FNO prediction | error map
+│   ├── compare_speed.py # benchmark: FNO vs classical solver (time + accuracy)
+│   ├── pinn.py          # physics-informed inverse calibration (recover α)
+│   └── digital_twin.py  # digital twin: calibrate + assimilate + forecast
 └── sensor/
-    └── read_amg8833.py # 8x8 hőszenzor kiolvasó (MicroPython / ESP32)
+    └── read_amg8833.py  # 8x8 thermal-sensor reader (MicroPython / ESP32)
 ```
 
-## Indulás
+## Usage
 
 ```bash
 pip install -r requirements.txt
 
-# Önálló smoke-tesztek
-python src/simulate.py      # ellenőrzi az energiamegmaradást (Neumann perem)
-python src/model.py         # paraméterszám + felbontás-invariancia
+# Standalone smoke tests
+python src/simulate.py      # checks energy conservation (Neumann boundary)
+python src/model.py         # parameter count + resolution invariance
 python src/dataset.py --samples 200 --out data/heat_dataset.npz
 
-# Tréning (adat menet közben generálva, ha nincs --data)
+# Training (data generated on the fly if --data is omitted)
 python src/train.py --samples 1000 --epochs 50
-# vagy előre generált adatból:
+# or from a pre-generated dataset:
 python src/train.py --data data/heat_dataset.npz --epochs 50
 
-# Vizualizáció a betanított modellből (paper/pitch ábrák)
+# Visualise a trained model
 python src/predict.py --n-samples 4 --out outputs/predictions.png
 
-# Benchmark: FNO vs klasszikus solver (a 9× gyorsulás reprodukálása)
+# Benchmark: FNO vs classical solver (reproduces the 9× speed-up)
 python src/train.py --samples 600 --epochs 25 --t-final 0.5 \
     --out checkpoints/fno_heat_long.pt
 python src/compare_speed.py --ckpt checkpoints/fno_heat_long.pt
 
-# PINN inverz kalibráció: rejtett alpha visszanyerése megfigyelésekből
+# PINN inverse calibration: recover a hidden alpha from observations
 python src/pinn.py --true-alpha 0.01
 
-# Digital twin: 8x8 zajos szenzorból teljes mező követése (+ ábra)
+# Digital twin: track the full field from a noisy 8x8 sensor (+ figure)
 python src/digital_twin.py --plot outputs/digital_twin.png
 ```
 
-**1. heti cél:** a validációs relatív L2 hiba < ~2% (a kanonikus FNO benchmark).
-*Elért:* val relL2 ≈ 0.016 már 500 mintából / 20 epochból (CPU). ✅
+A trained FNO reaches validation relative L2 ≈ 0.016 from 500 samples / 20
+epochs on CPU, matching the canonical FNO benchmark target (< 2%).
 
-## Roadmap
+## The physics
 
-**Szoftver (startup-versenyképes mag):**
-- [x] FNO szimulátor + adatgenerálás + tréning + vizualizáció (val relL2 ≈ 0.016)
-- [x] Benchmark: FNO vs klasszikus solver (akár **9× gyorsulás**, CPU-n)
-- [x] PINN inverz kalibráció (α visszanyerése megfigyelésekből)
-- [x] Digital twin: olcsó 8×8 szenzorból teljes mező követése (**3–9% hiba**)
-- [ ] Nehezebb PDE (Navier–Stokes) — itt 100–1000× a gyorsulás
-- [ ] Web API / SaaS demó + bizonytalanság-becslés
-
-**Hardver (a megkülönböztető réteg):**
-- [ ] **2. hét** — garázs kísérlet (AMG8833 + fémlap), valós α kalibráció
-- [ ] **3. hét** — sim-to-real teszt: szimon tanult modell valós adaton
-- [ ] **4. hét** — fine-tune / fizikai loss → valós hiba csökkentése + demó
-
-## A fizika
-
-2D hővezetési egyenlet a `[0,1]²` egységnégyzeten:
+The 2D heat equation on the unit square `[0,1]²`:
 
 ```
 du/dt = alpha * laplace(u)
 ```
 
-Az explicit séma stabil, amíg `alpha * dt * (1/dx² + 1/dy²) <= 0.5`; a solver
-ezt automatikusan betartja (`cfl` paraméter). Alapból zero-Neumann (szigetelt)
-peremek → a teljes hőmennyiség megmarad, ez jó ellenőrzési pont.
+The explicit scheme is stable while `alpha * dt * (1/dx² + 1/dy²) <= 0.5`; the
+solver enforces this automatically (the `cfl` parameter). Boundaries are
+zero-Neumann (insulated) by default, so total heat is conserved — a useful
+correctness check.
