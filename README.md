@@ -86,7 +86,9 @@ autodiff derivatives), which in our experiments converges stably to within
 │   ├── predict.py       # visualisation: u0 | true uT | FNO prediction | error map
 │   ├── compare_speed.py # benchmark: FNO vs classical solver (time + accuracy)
 │   ├── pinn.py          # physics-informed inverse calibration (recover α)
-│   └── digital_twin.py  # digital twin: calibrate + assimilate + forecast
+│   ├── digital_twin.py  # digital twin: calibrate + assimilate + forecast
+│   ├── experiments.py   # multi-seed studies (F1 calibration vs noise, F2 tracking)
+│   └── serve.py         # FastAPI web demo: FNO vs solver, live, in the browser
 └── sensor/
     └── read_amg8833.py  # 8x8 thermal-sensor reader (MicroPython / ESP32)
 ```
@@ -119,6 +121,11 @@ python src/pinn.py --true-alpha 0.01
 
 # Digital twin: track the full field from a noisy 8x8 sensor (+ figure)
 python src/digital_twin.py --plot outputs/digital_twin.png
+
+# Web demo (open http://127.0.0.1:8000): generate a heat source, predict it,
+# and watch the FNO beat the solver live. SERVE_GRID sets the demo resolution.
+python src/serve.py
+# at 256x256 the FNO is ~8x faster than the solver at matched accuracy
 ```
 
 A trained FNO reaches validation relative L2 ≈ 0.016 from 500 samples / 20
